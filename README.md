@@ -52,3 +52,28 @@ Examples of persona categories include:
 * Edgelord
 * Community Hopper
 * Explorer (default)
+
+# Visualizations
+
+All visualizations are built manually using the Canvas API. No charting libraries are used.
+
+* Karma donut chart
+* Content type donut chart
+* Hour-of-day activity bar chart
+* Weekly activity heatmap
+* Animated stats ticker
+* Word frequency data
+* Animated metric counters
+
+# UI and Design System
+
+The interface uses a dark luxury aesthetic with glassmorphism layering and animated background effects.
+
+**Key characteristics:**
+
+* CSS variable-based theme system
+* Light and dark mode toggle
+* Responsive grid layout
+* Smooth micro-interactions
+* Animated starfield canvas background
+* Animated gradient orbs
