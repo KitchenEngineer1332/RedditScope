@@ -77,3 +77,23 @@ The interface uses a dark luxury aesthetic with glassmorphism layering and anima
 * Smooth micro-interactions
 * Animated starfield canvas background
 * Animated gradient orbs
+
+# Performance Characteristics
+
+* No external dependencies
+* No frameworks
+* No build tools
+* Pure ES6 JavaScript
+* Canvas-based rendering
+* Single-pass analytics computation
+* Lightweight sentiment model
+* Deterministic persona classification
+
+# Limitations
+
+* Public Reddit data only
+* Limited to approximately 200 posts and comments
+* Subject to Reddit rate limiting
+* Client-side only
+* No persistent storage
+* No historical tracking
