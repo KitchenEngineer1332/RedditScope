@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RedditScope</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/png" href="logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+</head>
+<body data-theme="dark">
+
+  <!-- Ambient background layers -->
+  <div class="bg-noise"></div>
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+  <canvas class="bg-stars" id="bgStars"></canvas>
+  <div class="bg-grid"></div>
+
+  <!-- ── HEADER ── -->
+  <header class="site-header">
+    <div class="logo">
+      <svg class="logo-mark" viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="16" cy="16" r="5" fill="currentColor"/>
+        <line x1="16" y1="2" x2="16" y2="8" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="16" y1="24" x2="16" y2="30" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="2" y1="16" x2="8" y2="16" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="24" y1="16" x2="30" y2="16" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <span class="logo-text">RedditScope</span>
+      <span class="logo-tag">INTELLIGENCE</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── HERO ── -->
+  <section class="hero" id="hero">
+    <div class="hero-scan-line"></div>
+    <div class="hero-eyebrow">
+      <span class="eyebrow-dot"></span>
+      Deep Reddit Intelligence Platform
+    </div>
+    <h1 class="hero-title">
+      Decode any<br/>
+      <em>Reddit profile</em><br/>
+      in seconds
+    </h1>
+    <p class="hero-sub">
+      Advanced analytics · Behavioral patterns · Community insights · AI summary
+    </p>
+
+    <form class="search-form" id="searchForm" autocomplete="off">
+      <div class="input-group">
+        <div class="input-wrap">
+          <span class="input-prefix">u /</span>
+          <input
+            type="text"
+            id="usernameInput"
+            placeholder="username"
+            spellcheck="false"
+            autocapitalize="none"
+          />
+          <div class="input-shimmer"></div>
+        </div>
+        <button type="submit" class="btn-analyze" id="analyzeBtn">
+          <span>Analyze</span>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 10h12M10 4l6 6-6 6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="search-hint">Try: spez · GallowBoob · AutoModerator</div>
+    </form>
+
+    <div class="error-msg" id="errorMsg" role="alert" aria-live="polite"></div>
+
+    <div class="hero-stats">
+      <div class="hstat"><span class="hstat-n">200+</span><span>Posts fetched</span></div>
+      <div class="hstat-div"></div>
+      <div class="hstat"><span class="hstat-n">15+</span><span>Metrics tracked</span></div>
+      <div class="hstat-div"></div>
+      <div class="hstat"><span class="hstat-n">AI</span><span>Personality summary</span></div>
+    </div>
+  </section>
+
+  <!-- ── LOADING ── -->
+  <section class="loading-section" id="loadingSection" hidden>
+    <div class="loader-core">
+      <div class="loader-orbit">
+        <div class="loader-planet"></div>
+      </div>
+      <div class="loader-orbit orbit-2">
+        <div class="loader-planet p2"></div>
+      </div>
+      <div class="loader-center"></div>
+    </div>
+    <p class="loading-title" id="loadingLabel">Initializing…</p>
+    <div class="loading-pipeline" id="loadingSteps">
+      <div class="pipe-step" id="step1"><span class="pipe-dot"></span>Profile</div>
+      <div class="pipe-line"></div>
+      <div class="pipe-step" id="step2"><span class="pipe-dot"></span>Posts</div>
+      <div class="pipe-line"></div>
+      <div class="pipe-step" id="step3"><span class="pipe-dot"></span>Comments</div>
+      <div class="pipe-line"></div>
+      <div class="pipe-step" id="step4"><span class="pipe-dot"></span>Analysis</div>
+    </div>
+    <p class="loading-sub">Crunching up to 200 posts and 200 comments…</p>
+  </section>
+
+  <!-- ── RESULTS ── -->
+  <section class="results" id="results" hidden>
+
+    <!-- ①  PROFILE HERO -->
+    <div class="profile-hero" id="profileHero">
+      <div class="profile-hero-bg" id="profileHeroBg"></div>
+      <div class="profile-hero-content">
+        <div class="avatar-cluster">
+          <div class="avatar-glow"></div>
+          <img class="avatar-img" id="profileAvatar" src="" alt="avatar" />
+          <div class="avatar-status" id="avatarStatus"></div>
+        </div>
+        <div class="profile-identity">
+          <div class="profile-name" id="profileUsername"></div>
+          <div class="profile-badges" id="profileBadges"></div>
+          <div class="profile-since" id="profileSince"></div>
+        </div>
+        <div class="profile-karma-block">
+          <div class="karma-ring-wrap">
+            <canvas class="karma-donut" id="karmaDonut" width="110" height="110"></canvas>
+            <div class="karma-center-val" id="totalKarmaVal"></div>
+          </div>
+          <div class="karma-legend" id="karmaLegend"></div>
+        </div>
+      </div>
+      <!-- Persona badge -->
+      <div class="persona-badge" id="personaBadge">
+        <span class="persona-icon" id="personaIcon"></span>
+        <span class="persona-label" id="personaLabel"></span>
+      </div>
+    </div>
+
+    <!-- ②  STATS TICKER -->
+    <div class="stats-ticker" id="statsTicker">
+      <div class="ticker-track" id="tickerTrack"></div>
+    </div>
+
+    <!-- ③  METRICS GRID -->
+    <div class="section-header">
+      <span class="section-tag">ANALYTICS</span>
+      <h2 class="section-title">Activity Metrics</h2>
+    </div>
+    <div class="metrics-grid" id="metricsGrid">
+      <div class="metric-card" id="mPosts">
+        <div class="metric-icon">📄</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Posts Analyzed</div>
+        <div class="metric-sub" id="mPostsSub"></div>
+      </div>
+      <div class="metric-card" id="mComments">
+        <div class="metric-icon">💬</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Comments Analyzed</div>
+        <div class="metric-sub" id="mCommentsSub"></div>
+      </div>
+      <div class="metric-card" id="mAvgScore">
+        <div class="metric-icon">⬆️</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Avg Post Score</div>
+        <div class="metric-sub" id="mAvgScoreSub"></div>
+      </div>
+      <div class="metric-card" id="mFreq">
+        <div class="metric-icon">📅</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Posts / Month</div>
+        <div class="metric-sub" id="mFreqSub"></div>
+      </div>
+      <div class="metric-card" id="mEngagement">
+        <div class="metric-icon">🔥</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Avg Comments/Post</div>
+        <div class="metric-sub" id="mEngagementSub"></div>
+      </div>
+      <div class="metric-card" id="mRatio">
+        <div class="metric-icon">⚖️</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Comment/Post Ratio</div>
+        <div class="metric-sub" id="mRatioSub"></div>
+      </div>
+      <div class="metric-card" id="mSentiment">
+        <div class="metric-icon">🧠</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Sentiment Score</div>
+        <div class="metric-sub" id="mSentimentSub"></div>
+      </div>
+      <div class="metric-card" id="mControversy">
+        <div class="metric-icon">⚡</div>
+        <div class="metric-val">—</div>
+        <div class="metric-lbl">Controversiality</div>
+        <div class="metric-sub" id="mControversySub"></div>
+      </div>
+    </div>
+
+    <!-- ④  CHARTS ROW -->
+    <div class="section-header">
+      <span class="section-tag">BEHAVIOR</span>
+      <h2 class="section-title">Activity Patterns</h2>
+    </div>
+    <div class="charts-row">
+      <!-- Hour of day chart -->
+      <div class="chart-card chart-hour">
+        <div class="chart-card-header">
+          <div class="chart-card-title">Peak Activity Hours</div>
+          <div class="chart-card-sub" id="peakHourLabel">—</div>
+        </div>
+        <div class="hour-chart-wrap">
+          <canvas id="hourChart" width="520" height="120"></canvas>
+        </div>
+        <div class="hour-x-labels">
+          <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span>
+        </div>
+      </div>
+      <!-- Content type breakdown -->
+      <div class="chart-card chart-type">
+        <div class="chart-card-header">
+          <div class="chart-card-title">Content Types</div>
+        </div>
+        <div class="type-donut-wrap">
+          <canvas id="typeDonut" width="140" height="140"></canvas>
+          <div class="type-donut-center" id="typeDonutCenter"></div>
+        </div>
+        <div class="type-legend" id="typeLegend"></div>
+      </div>
+    </div>
+
+    <!-- Day-of-week heatmap -->
+    <div class="chart-card chart-heatmap">
+      <div class="chart-card-header">
+        <div class="chart-card-title">Weekly Activity Heatmap</div>
+        <div class="chart-card-sub">Posts + comments by day of week</div>
+      </div>
+      <div class="heatmap-wrap" id="heatmapWrap"></div>
+    </div>
+
+    <!-- ⑤  COMMUNITY PRESENCE -->
+    <div class="section-header">
+      <span class="section-tag">COMMUNITIES</span>
+      <h2 class="section-title">Top Subreddits</h2>
+    </div>
+    <div class="card subs-card">
+      <div class="subs-list" id="subredditList"></div>
+    </div>
+
+    <!-- ⑥  BEST CONTENT -->
+    <div class="section-header">
+      <span class="section-tag">HIGHLIGHTS</span>
+      <h2 class="section-title">Best Content</h2>
+    </div>
+    <div class="best-grid">
+      <div class="best-card" id="topPostCard">
+        <div class="best-card-tag">🏆 Most Upvoted Post</div>
+        <div class="best-card-body" id="topPost"></div>
+      </div>
+      <div class="best-card" id="topCommentCard">
+        <div class="best-card-tag">💎 Most Upvoted Comment</div>
+        <div class="best-card-body" id="topComment"></div>
+      </div>
+      <div class="best-card" id="mostActiveCard">
+        <div class="best-card-tag">⚡ Most Active Day</div>
+        <div class="best-card-body" id="mostActiveDay"></div>
+      </div>
+    </div>
+
+    <!-- ⑦  LANGUAGE FINGERPRINT -->
+    <div class="section-header">
+      <span class="section-tag">LINGUISTICS</span>
+      <h2 class="section-title">Language Fingerprint</h2>
+    </div>
+    <div class="card words-card">
+      <div class="word-cloud" id="wordCloud"></div>
+    </div>
+
+
+    <!-- ⑧  PERSONALITY TYPE -->
+    <div class="section-header">
+      <span class="section-tag">PSYCHOLOGY</span>
+      <h2 class="section-title">Reddit Personality Type</h2>
+    </div>
+    <div class="pt-card" id="ptCard">
+      <div class="pt-main">
+        <div class="pt-type-display">
+          <div class="pt-code" id="ptCode">——</div>
+          <div class="pt-name" id="ptName">Analyzing…</div>
+          <div class="pt-tagline" id="ptTagline"></div>
+        </div>
+        <div class="pt-axes" id="ptAxes"></div>
+      </div>
+      <div class="pt-details">
+        <div class="pt-block">
+          <div class="pt-block-label">💪 STRENGTHS</div>
+          <ul class="pt-list" id="ptStrengths"></ul>
+        </div>
+        <div class="pt-block">
+          <div class="pt-block-label">⚠️ BLIND SPOTS</div>
+          <ul class="pt-list" id="ptWeaknesses"></ul>
+        </div>
+        <div class="pt-block">
+          <div class="pt-block-label">🧬 YOU MIGHT BE</div>
+          <div class="pt-similar-list" id="ptSimilar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑨  REPORT CARD -->
+    <div class="section-header">
+      <span class="section-tag">GRADES</span>
+      <h2 class="section-title">Reddit Report Card</h2>
+    </div>
+    <div class="rc-card" id="rcCard">
+      <div class="rc-header">
+        <div class="rc-school">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><path d="M10 2L2 7l8 5 8-5-8-5z"/><path d="M2 12l8 5 8-5"/><path d="M2 17l8 5 8-5"/></svg>
+          RedditScope Academy
+        </div>
+        <div class="rc-student-info">
+          <span class="rc-student" id="rcStudent"></span>
+          <span class="rc-term" id="rcTerm"></span>
+        </div>
+        <div class="rc-gpa-block">
+          <div class="rc-gpa" id="rcGpa">—</div>
+          <div class="rc-gpa-label">GPA</div>
+          <div class="rc-gpa-desc" id="rcGpaDesc"></div>
+        </div>
+      </div>
+      <div class="rc-grades" id="rcGrades"></div>
+      <div class="rc-teacher-comment">
+        <div class="rc-tc-label">📝 TEACHER'S COMMENT</div>
+        <p class="rc-tc-text" id="rcTeacherComment"></p>
+      </div>
+    </div>
+
+    <!-- ⑩  ROAST -->
+    <div class="section-header">
+      <span class="section-tag">🔥 FOR FUN</span>
+      <h2 class="section-title">The Roast</h2>
+    </div>
+    <div class="roast-card" id="roastCard">
+      <div class="roast-top">
+        <div class="roast-emoji">🔥</div>
+        <div class="roast-intro">
+          <div class="roast-title">Brutally Honest Assessment</div>
+          <div class="roast-subtitle" id="roastSubtitle"></div>
+        </div>
+        <div class="roast-heat">
+          <div class="roast-heat-val" id="roastHeatVal">0</div>
+          <div class="roast-heat-label">ROAST HEAT</div>
+          <div class="roast-heat-bar-wrap"><div class="roast-heat-bar" id="roastHeatBar"></div></div>
+        </div>
+      </div>
+      <div class="roast-lines" id="roastLines"></div>
+      <div class="roast-redemption" id="roastRedemption"></div>
+    </div>
+
+    <!-- ⑪  AI SUMMARY -->
+    <div class="section-header">
+      <span class="section-tag">AI ANALYSIS</span>
+      <h2 class="section-title">Redditor Profile</h2>
+    </div>
+    <div class="summary-card">
+      <!-- Header bar -->
+      <div class="summary-header">
+        <div class="summary-orb">
+          <svg viewBox="0 0 32 32" fill="none">
+            <circle cx="16" cy="16" r="12" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 2"/>
+            <circle cx="16" cy="16" r="4" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="summary-head-text">
+          <div class="summary-head-title">AI Intelligence Report</div>
+          <div class="summary-head-sub" id="summaryUsername"></div>
+        </div>
+        <div class="summary-score-badge" id="summaryScoreBadge">
+          <div class="ssb-num" id="summaryEngagementScore">—</div>
+          <div class="ssb-lbl">Influence Score</div>
+        </div>
+      </div>
+
+      <!-- Overview paragraph -->
+      <div class="summary-section summary-section--overview">
+        <div class="ss-label">
+          <span class="ss-label-dot" style="--dot-color:#ff4500"></span>
+          OVERVIEW
+        </div>
+        <p class="summary-text" id="summaryText"></p>
+      </div>
+
+      <!-- Personality bars -->
+      <div class="summary-section summary-section--personality">
+        <div class="ss-label">
+          <span class="ss-label-dot" style="--dot-color:#9b5de5"></span>
+          PERSONALITY DIMENSIONS
+        </div>
+        <div class="personality-bars" id="personalityBars"></div>
+      </div>
+
+      <!-- Two-column deep dive -->
+      <div class="summary-deep-grid">
+        <div class="summary-section summary-section--activity">
+          <div class="ss-label">
+            <span class="ss-label-dot" style="--dot-color:#4cc9f0"></span>
+            ACTIVITY PROFILE
+          </div>
+          <div class="ss-body" id="activityProfile"></div>
+        </div>
+        <div class="summary-section summary-section--style">
+          <div class="ss-label">
+            <span class="ss-label-dot" style="--dot-color:#06d6a0"></span>
+            CONTENT STYLE
+          </div>
+          <div class="ss-body" id="contentStyle"></div>
+        </div>
+      </div>
+
+      <!-- Behavioral insight paragraph -->
+      <div class="summary-section summary-section--insight">
+        <div class="ss-label">
+          <span class="ss-label-dot" style="--dot-color:#f0b429"></span>
+          BEHAVIORAL INSIGHT
+        </div>
+        <p class="ss-insight-text" id="behavioralInsight"></p>
+      </div>
+
+      <!-- Traits -->
+      <div class="summary-traits" id="summaryTraits"></div>
+
+      <!-- Actions -->
+      <div class="summary-actions">
+        <button class="btn-act" id="copyBtn">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="6" width="11" height="11" rx="2"/><path d="M3 14V4a1 1 0 011-1h10"/></svg>
+          Copy Summary
+        </button>
+        <button class="btn-act" id="downloadBtn">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3v10m-4-4l4 4 4-4"/><path d="M3 17h14"/></svg>
+          Download Report
+        </button>
+        <button class="btn-act btn-act-share" id="shareBtn">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="15" cy="4" r="2"/><circle cx="15" cy="16" r="2"/><circle cx="5" cy="10" r="2"/><path d="M7 10.9l6 3M7 9.1l6-3"/></svg>
+          Share
+        </button>
+      </div>
+    </div>
+
+    <!-- Back button -->
+    <div class="back-row">
+      <button class="btn-back" id="analyzeAgain">← Analyze Another User</button>
+    </div>
+
+  </section>
+
+  <footer class="site-footer">
+    <span>RedditScope · Powered by Reddit's public API · Not affiliated with Reddit, Inc.</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
