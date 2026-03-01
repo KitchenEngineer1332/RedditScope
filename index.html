@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
+  <meta name="referrer" content="no-referrer" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RedditScope</title>
   <link rel="stylesheet" href="style.css" />
@@ -9,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 </head>
-<body data-theme="dark">
+<body>
 
   <!-- Ambient background layers -->
   <div class="bg-noise"></div>
@@ -92,7 +93,7 @@
     <div class="error-msg" id="errorMsg" role="alert" aria-live="polite"></div>
 
     <div class="hero-stats">
-      <div class="hstat"><span class="hstat-n">200+</span><span>Posts fetched</span></div>
+      <div class="hstat"><span class="hstat-n">1,000</span><span>Posts fetched</span></div>
       <div class="hstat-div"></div>
       <div class="hstat"><span class="hstat-n">15+</span><span>Metrics tracked</span></div>
       <div class="hstat-div"></div>
@@ -121,7 +122,7 @@
       <div class="pipe-line"></div>
       <div class="pipe-step" id="step4"><span class="pipe-dot"></span>Analysis</div>
     </div>
-    <p class="loading-sub">Crunching up to 200 posts and 200 comments…</p>
+    <p class="loading-sub" id="loadingSub">Fetching up to 1,000 posts &amp; 1,000 comments…</p>
   </section>
 
   <!-- ── RESULTS ── -->
@@ -469,6 +470,46 @@
     <!-- Back button -->
     <div class="back-row">
       <button class="btn-back" id="analyzeAgain">← Analyze Another User</button>
+      <button class="btn-dig-deep" id="digDeepBtn">
+        <span class="dig-deep-icon">🔍</span>
+        <span>Let's Dig Deep</span>
+      </button>
+    </div>
+
+    <!-- ⑫  DIG DEEP PANEL -->
+    <div class="dig-deep-panel" id="digDeepPanel" hidden>
+      <div class="section-header">
+        <span class="section-tag">DEEP DIVE</span>
+        <h2 class="section-title">All Posts &amp; Comments</h2>
+      </div>
+
+      <div class="dd-toolbar">
+        <div class="dd-search-wrap">
+          <svg class="dd-search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="6"/><path d="M15 15l-3-3"/></svg>
+          <input class="dd-search" id="ddSearch" type="text" placeholder="Search posts and comments…" autocomplete="off" />
+        </div>
+        <div class="dd-filters">
+          <button class="dd-filter active" data-filter="all">All</button>
+          <button class="dd-filter" data-filter="posts">Posts</button>
+          <button class="dd-filter" data-filter="comments">Comments</button>
+        </div>
+        <div class="dd-sort-wrap">
+          <select class="dd-sort" id="ddSort">
+            <option value="date-desc">Newest first</option>
+            <option value="date-asc">Oldest first</option>
+            <option value="score-desc">Highest score</option>
+            <option value="score-asc">Lowest score</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="dd-stats-row" id="ddStatsRow"></div>
+      <div class="dd-loading" id="ddLoading" hidden>
+        <div class="dd-spinner"></div>
+        <span id="ddLoadingText">Loading…</span>
+      </div>
+      <div class="dd-list" id="ddList"></div>
+      <div class="dd-pagination" id="ddPagination"></div>
     </div>
 
   </section>
