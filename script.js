@@ -94,6 +94,13 @@ analyzeAgain.addEventListener('click', () => {
   hero.style.display = '';
   usernameInput.value = '';
   clearError();
+  // Reset dig deep
+  const ddPanel = document.getElementById('digDeepPanel');
+  const ddBtn   = document.getElementById('digDeepBtn');
+  if (ddPanel) ddPanel.hidden = true;
+  if (ddBtn)   { ddBtn.disabled = false; ddBtn.innerHTML = '<span class="dig-deep-icon">🔍</span><span>Let\u2019s Dig Deep</span>'; }
+  window._currentPosts    = [];
+  window._currentComments = [];
   usernameInput.focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
@@ -117,8 +124,25 @@ async function analyzeUser(username) {
     const profile = await fetchProfile(username);
     setStep(0, 'done'); setStep(1, 'active');
 
+    // Check if profile is hidden (posts hidden from /submitted endpoint)
+    updateLoadingLabel('Checking profile visibility…');
+    const profileIsHidden = await checkIfHidden(username);
+    profile._isHidden = profileIsHidden;
+
     updateLoadingLabel('Fetching posts…');
-    const posts = await fetchListing(username, 'submitted');
+    let posts = await fetchListing(username, 'submitted');
+
+    // If hidden or fewer than 5 posts came back, try search-index fallback
+    if (profileIsHidden || posts.length < 5) {
+      updateLoadingLabel(profileIsHidden
+        ? 'Hidden profile — searching index…'
+        : 'Low results — searching index…');
+      const searchPosts = await fetchListingBySearch(username);
+      if (searchPosts.length > posts.length) {
+        posts = searchPosts;
+        profile._usedSearchFallback = true;
+      }
+    }
     setStep(1, 'done'); setStep(2, 'active');
 
     updateLoadingLabel('Fetching comments…');
@@ -158,15 +182,64 @@ async function fetchProfile(username) {
 }
 
 async function fetchListing(username, type) {
+  const MAX_PAGES = 10;
   const base = `https://www.reddit.com/user/${encodeURIComponent(username)}/${type}.json?limit=100`;
-  const p1 = await fetchJSON(base);
-  if (!p1.data?.children) return [];
-  let items = p1.data.children.map(c => c.data).filter(Boolean);
-  if (p1.data.after) {
-    try {
-      const p2 = await fetchJSON(`${base}&after=${p1.data.after}`);
-      if (p2.data?.children) items = items.concat(p2.data.children.map(c => c.data).filter(Boolean));
-    } catch(_) {}
+  let items = [], after = null, page = 0;
+  while (page < MAX_PAGES) {
+    const url = after ? `${base}&after=${after}` : base;
+    let res;
+    try { res = await fetchJSON(url); } catch(e) { break; }
+    if (!res?.data?.children?.length) break;
+    const batch = res.data.children.map(c => c.data).filter(Boolean);
+    items = items.concat(batch);
+    page++;
+    after = res.data.after;
+    if (!after) break;
+    await sleep(120);
+  }
+  return items;
+}
+
+// ── Hidden profile detection ──────────────────────────────────────
+// When a user hides their profile, /submitted returns empty.
+// But Reddit's search index still has their posts via author:"username".
+async function checkIfHidden(username) {
+  try {
+    const url = `https://www.reddit.com/user/${encodeURIComponent(username)}/submitted.json?limit=10`;
+    const res = await fetchJSON(url);
+    if (!res?.data?.children) return true; // can't read → treat as hidden
+    const children = res.data.children || [];
+    if (children.length === 0) return true;
+    // If all returned posts are in their own user-profile subreddit, they're hidden
+    const nonProfile = children.filter(c => c.data && c.data.subreddit_type !== 'user');
+    return nonProfile.length === 0;
+  } catch (_) { return false; }
+}
+
+// ── Search-index post fetch (works on hidden profiles) ─────────────
+// Uses /search.json?q=author:"username" — Reddit's search index
+// indexes posts even when user profile is set to hidden.
+async function fetchListingBySearch(username) {
+  const q = `author:"${username}"`;
+  const base = `https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&sort=relevance&limit=100&type=link`;
+  let items = [], after = null, page = 0, seenIds = new Set();
+  const MAX = 10;
+
+  while (page < MAX) {
+    const url = after ? `${base}&after=${after}` : base;
+    let res;
+    try { res = await fetchJSON(url); } catch(e) { break; }
+    if (!res?.data?.children?.length) break;
+
+    const batch = res.data.children
+      .filter(c => c.data && !seenIds.has(c.data.id))
+      .map(c => { seenIds.add(c.data.id); return c.data; });
+
+    items = items.concat(batch);
+    page++;
+    after = res.data.after;
+    if (!after) break;
+    await sleep(150);
   }
   return items;
 }
@@ -379,6 +452,9 @@ function calcPostsPerMonth(posts, createdUtc) {
 //  RENDERING
 // ================================================================
 function renderResults(profile, posts, comments, analysis) {
+  window._currentPosts    = posts;
+  window._currentComments = comments;
+  window._currentProfile  = profile;
   renderProfileHero(profile, posts, comments, analysis);
   renderTicker(profile, posts, comments, analysis);
   renderMetrics(profile, posts, comments, analysis);
@@ -416,13 +492,43 @@ function renderProfileHero(profile, posts, comments, analysis) {
   badges.innerHTML = '';
   const age = accountAge(profile.created_utc);
   badges.innerHTML += `<span class="badge badge-age">🎂 ${age} old</span>`;
-  if (profile.is_employee) badges.innerHTML += `<span class="badge badge-employee">🏢 Reddit Employee</span>`;
-  if (profile.is_gold)     badges.innerHTML += `<span class="badge badge-premium">★ Premium</span>`;
-  if (profile.has_verified_email) badges.innerHTML += `<span class="badge badge-verified">✓ Verified</span>`;
+  if (profile._isHidden)           badges.innerHTML += `<span class="badge badge-hidden">👻 Hidden Profile</span>`;
+  if (profile.is_employee)         badges.innerHTML += `<span class="badge badge-employee">🏢 Reddit Employee</span>`;
+  if (profile.is_gold)             badges.innerHTML += `<span class="badge badge-premium">★ Premium</span>`;
+  if (profile.has_verified_email)  badges.innerHTML += `<span class="badge badge-verified">✓ Verified</span>`;
 
   // Since
   const cakeDay = new Date(profile.created_utc * 1000).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
   $('profileSince').textContent = `Member since ${cakeDay}`;
+
+  // Show/update the hidden profile notice
+  let hiddenNotice = document.getElementById('hiddenProfileNotice');
+  if (profile._isHidden || profile._usedSearchFallback) {
+    if (!hiddenNotice) {
+      hiddenNotice = document.createElement('div');
+      hiddenNotice.id = 'hiddenProfileNotice';
+      hiddenNotice.className = 'hidden-profile-notice';
+      const resultsEl = document.getElementById('results');
+      const profileHeroEl = document.getElementById('profileHero');
+      resultsEl.insertBefore(hiddenNotice, profileHeroEl.nextSibling);
+    }
+    const mode = profile._usedSearchFallback
+      ? 'Posts were fetched via Reddit\'s search index'
+      : 'Profile is hidden';
+    const explanation = profile._isHidden
+      ? 'This user has hidden their profile their posts are invisible on their profile page, but were recovered from Reddit\'s search index.'
+      : 'Fewer posts were found via the profile endpoint, so the search index was used to recover more.';
+    hiddenNotice.innerHTML = `
+      <div class="hn-icon">👻</div>
+      <div class="hn-body">
+        <div class="hn-title">${mode}</div>
+        <div class="hn-desc">${explanation} Comments from hidden profiles cannot be recovered.</div>
+      </div>
+    `;
+    hiddenNotice.style.display = 'flex';
+  } else if (hiddenNotice) {
+    hiddenNotice.style.display = 'none';
+  }
 
   // Karma donut
   const postK    = profile.link_karma || 0;
@@ -499,8 +605,8 @@ function renderMetrics(profile, posts, comments, analysis) {
     animateCounter(el.querySelector('.metric-val'));
   }
 
-  setM('mPosts',       formatNumber(posts.length),            `<span>${posts.length >= 200 ? '200 max fetched' : 'All fetched'}</span>`);
-  setM('mComments',    formatNumber(comments.length),         `<span>${comments.length >= 200 ? '200 max fetched' : 'All fetched'}</span>`);
+  setM('mPosts',       formatNumber(posts.length),            `<span>${posts.length >= 1000 ? '1,000 max fetched' : 'All fetched'}</span>`);
+  setM('mComments',    formatNumber(comments.length),         `<span>${comments.length >= 1000 ? '1,000 max fetched' : 'All fetched'}</span>`);
   setM('mAvgScore',    formatNumber(analysis.avgPostScore),   `<span class="${scoreClass}">${scoreLabel}</span>`);
   setM('mFreq',        analysis.postsPerMonth,                `<span>Per calendar month</span>`);
   setM('mEngagement',  analysis.avgComments,                  `<span>Avg discussion per post</span>`);
@@ -1055,7 +1161,7 @@ function generatePDF(profile, analysis) {
   // Personality type
   let ptCode = '—', ptName = '—', ptTagline = '';
   try {
-    const axes = computePersonalityAxes(profile, [], [], analysis);
+    const axes = computePersonalityAxes(profile, window._currentPosts||[], window._currentComments||[], analysis);
     const type = derivePersonalityType(axes);
     ptCode    = type.code;
     ptName    = type.name;
@@ -1479,76 +1585,255 @@ function generatePDF(profile, analysis) {
   popup.document.close();
 }
 
-function buildReport(profile, analysis) {
-  const total = (profile.link_karma||0) + (profile.comment_karma||0);
-  const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const HOURS_STR = ['12am','1am','2am','3am','4am','5am','6am','7am','8am','9am','10am','11am',
-                     '12pm','1pm','2pm','3pm','4pm','5pm','6pm','7pm','8pm','9pm','10pm','11pm'];
 
-  // Personality dimensions
-  const personalities = [
-    `Positivity:    ${analysis.sentimentScore}% (${analysis.sentimentScore > 65 ? 'Positive' : analysis.sentimentScore > 45 ? 'Neutral' : 'Critical'})`,
-    `Engagement:    ${Math.min(100, Math.round((analysis.avgPostScore/2000)*100))}% of max`,
-    `Discussion:    ${Math.min(100, Math.round((parseFloat(analysis.ratio)/20)*100))}% commenter`,
-    `Activity:      ${Math.min(100, Math.round((parseFloat(analysis.postsPerMonth)/30)*100))}% of max cadence`,
-    `Controversy:   ${analysis.controversiality}%`,
-    `Reach:         ${Math.min(100, analysis.topSubs.length * 14)}% (${analysis.topSubs.length} communities)`,
-  ];
 
-  return [
-    '══════════════════════════════════════════════════════════',
-    '  REDDITSCOPE — DEEP INTELLIGENCE REPORT',
-    `  Subject:   u/${profile.name}`,
-    `  Persona:   ${analysis.persona.icon} ${analysis.persona.label}`,
-    `  Generated: ${new Date().toLocaleString()}`,
-    '══════════════════════════════════════════════════════════',
-    '',
-    '── IDENTITY ─────────────────────────────────────────────',
-    `Username:          u/${profile.name}`,
-    `Account Age:       ${accountAge(profile.created_utc)}`,
-    `Member Since:      ${new Date(profile.created_utc*1000).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`,
-    `Total Karma:       ${formatNumber(total)}`,
-    `  Post Karma:      ${formatNumber(profile.link_karma||0)}`,
-    `  Comment Karma:   ${formatNumber(profile.comment_karma||0)}`,
-    `Premium:           ${profile.is_gold ? 'Yes ★' : 'No'}`,
-    `Verified Email:    ${profile.has_verified_email ? 'Yes ✓' : 'No'}`,
-    `Reddit Employee:   ${profile.is_employee ? 'Yes 🏢' : 'No'}`,
-    '',
-    '── ACTIVITY METRICS ─────────────────────────────────────',
-    `Posts Analyzed:    ${analysis.totalItems !== undefined ? analysis.totalItems : '—'}`,
-    `Posts / Month:     ${analysis.postsPerMonth}`,
-    `Comments / Month:  ${analysis.avgComments}`,
-    `Avg Post Score:    ▲ ${formatNumber(analysis.avgPostScore)}`,
-    `Avg Comments/Post: ${analysis.avgComments}`,
-    `C/P Ratio:         ${analysis.ratio}:1`,
-    `Sentiment:         ${analysis.sentimentScore}% positive`,
-    `Controversiality:  ${analysis.controversiality}%`,
-    `Awards Earned:     ${analysis.awards}`,
-    `Peak Hour:         ${HOURS_STR[analysis.peakHour]}`,
-    `Peak Day:          ${analysis.peakDow !== undefined ? DAYS[analysis.peakDow] : '—'}`,
-    '',
-    '── PERSONALITY DIMENSIONS ───────────────────────────────',
-    ...personalities,
-    '',
-    '── TOP COMMUNITIES ──────────────────────────────────────',
-    ...analysis.topSubs.map((s,i) => `  ${i+1}. r/${s.name.padEnd(24)} ${s.count} interactions (${s.pct}%)`),
-    '',
-    '── LANGUAGE FINGERPRINT ─────────────────────────────────',
-    analysis.wordFreq.slice(0,16).map(([w,c]) => `${w}(${c})`).join('  '),
-    '',
-    '── AI OVERVIEW ──────────────────────────────────────────',
-    window._currentSummary || '',
-    '',
-    '── PERSONA ──────────────────────────────────────────────',
-    `${analysis.persona.icon} ${analysis.persona.label}`,
-    `   ${analysis.persona.desc}`,
-    '',
-    '──────────────────────────────────────────────────────────',
-    'Generated by RedditScope · Powered by Reddit public API',
-    'Not affiliated with Reddit, Inc.',
-  ].join('\n');
-}
+// ================================================================
+//  DIG DEEP — Full post + comment browser
+// ================================================================
+(function initDigDeep() {
+  const btn = document.getElementById('digDeepBtn');
+  if (!btn) return;
 
+  let ddItems     = [];   // all items (posts + comments) for current user
+  let ddFiltered  = [];   // after search + filter
+  let ddFilter    = 'all';
+  let ddSort      = 'date-desc';
+  let ddPage      = 0;
+  const DD_PAGE_SIZE = 25;
+
+  // ── Open panel and populate ──────────────────────────────────────
+  btn.addEventListener('click', async () => {
+    const panel = document.getElementById('digDeepPanel');
+    const posts    = window._currentPosts    || [];
+    const comments = window._currentComments || [];
+    const profile  = window._currentProfile  || {};
+
+    if (!posts.length && !comments.length) return;
+
+    // Show panel, scroll to it
+    panel.hidden = false;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    btn.textContent = '✓ Digging Deep';
+    btn.disabled = true;
+
+    // Build unified item list if not already built for this user
+    if (!ddItems.length || ddItems[0]?._username !== profile.name) {
+      ddItems = [];
+
+      posts.forEach(p => {
+        const link = p.permalink
+          ? `https://reddit.com${p.permalink}`
+          : `https://reddit.com/r/${p.subreddit}/comments/${p.id}`;
+        ddItems.push({
+          _username: profile.name,
+          type:    'post',
+          id:      p.id,
+          title:   p.title || '(untitled)',
+          body:    p.selftext || '',
+          sub:     p.subreddit || '',
+          score:   p.score || 0,
+          comments:p.num_comments || 0,
+          date:    p.created_utc || 0,
+          link,
+          upvoteRatio: p.upvote_ratio || null,
+        });
+      });
+
+      comments.forEach(c => {
+        const link = c.permalink
+          ? `https://reddit.com${c.permalink}`
+          : c.link_permalink
+            ? c.link_permalink
+            : `https://reddit.com/r/${c.subreddit}/comments/${c.link_id?.replace('t3_','')}`;
+        ddItems.push({
+          _username: profile.name,
+          type:    'comment',
+          id:      c.id,
+          title:   c.link_title || '(context unavailable)',
+          body:    c.body || '',
+          sub:     c.subreddit || '',
+          score:   c.score || 0,
+          date:    c.created_utc || 0,
+          link,
+        });
+      });
+    }
+
+    ddPage = 0;
+    ddFilter = 'all';
+    ddSort   = 'date-desc';
+
+    // Reset filter buttons
+    document.querySelectorAll('.dd-filter').forEach(b => {
+      b.classList.toggle('active', b.dataset.filter === 'all');
+    });
+    const sortEl = document.getElementById('ddSort');
+    if (sortEl) sortEl.value = 'date-desc';
+
+    applyDDFilter();
+  });
+
+  // ── Filter buttons ───────────────────────────────────────────────
+  document.addEventListener('click', e => {
+    const fb = e.target.closest('.dd-filter');
+    if (!fb) return;
+    document.querySelectorAll('.dd-filter').forEach(b => b.classList.remove('active'));
+    fb.classList.add('active');
+    ddFilter = fb.dataset.filter;
+    ddPage = 0;
+    applyDDFilter();
+  });
+
+  // ── Sort select ──────────────────────────────────────────────────
+  document.addEventListener('change', e => {
+    if (e.target.id !== 'ddSort') return;
+    ddSort = e.target.value;
+    ddPage = 0;
+    applyDDFilter();
+  });
+
+  // ── Search ───────────────────────────────────────────────────────
+  let ddSearchTimer;
+  document.addEventListener('input', e => {
+    if (e.target.id !== 'ddSearch') return;
+    clearTimeout(ddSearchTimer);
+    ddSearchTimer = setTimeout(() => {
+      ddPage = 0;
+      applyDDFilter();
+    }, 220);
+  });
+
+  // ── Core filter + sort + render pipeline ─────────────────────────
+  function applyDDFilter() {
+    const query = (document.getElementById('ddSearch')?.value || '').toLowerCase().trim();
+
+    ddFiltered = ddItems.filter(item => {
+      if (ddFilter === 'posts'    && item.type !== 'post')    return false;
+      if (ddFilter === 'comments' && item.type !== 'comment') return false;
+      if (query) {
+        const haystack = `${item.title} ${item.body} ${item.sub}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+
+    // Sort
+    ddFiltered.sort((a, b) => {
+      switch (ddSort) {
+        case 'date-asc':   return a.date - b.date;
+        case 'score-desc': return b.score - a.score;
+        case 'score-asc':  return a.score - b.score;
+        default:           return b.date - a.date; // date-desc
+      }
+    });
+
+    renderDDStats();
+    renderDDPage();
+    renderDDPagination();
+  }
+
+  // ── Stats bar ────────────────────────────────────────────────────
+  function renderDDStats() {
+    const el = document.getElementById('ddStatsRow');
+    if (!el) return;
+    const posts    = ddFiltered.filter(i => i.type === 'post').length;
+    const comments = ddFiltered.filter(i => i.type === 'comment').length;
+    const totalScore = ddFiltered.reduce((s,i) => s + i.score, 0);
+    const pages = Math.ceil(ddFiltered.length / DD_PAGE_SIZE);
+    el.innerHTML = `
+      <div class="dd-stat"><span class="dd-stat-val">${ddFiltered.length.toLocaleString()}</span><span class="dd-stat-lbl">Results</span></div>
+      <div class="dd-stat-div"></div>
+      <div class="dd-stat"><span class="dd-stat-val">${posts.toLocaleString()}</span><span class="dd-stat-lbl">Posts</span></div>
+      <div class="dd-stat-div"></div>
+      <div class="dd-stat"><span class="dd-stat-val">${comments.toLocaleString()}</span><span class="dd-stat-lbl">Comments</span></div>
+      <div class="dd-stat-div"></div>
+      <div class="dd-stat"><span class="dd-stat-val">${totalScore >= 1000 ? (totalScore/1000).toFixed(1)+'K' : totalScore}</span><span class="dd-stat-lbl">Total Score</span></div>
+      ${pages > 1 ? `<div class="dd-stat-div"></div><div class="dd-stat"><span class="dd-stat-val">${ddPage+1}/${pages}</span><span class="dd-stat-lbl">Page</span></div>` : ''}
+    `;
+  }
+
+  // ── Render current page of items ─────────────────────────────────
+  function renderDDPage() {
+    const list = document.getElementById('ddList');
+    if (!list) return;
+
+    const start = ddPage * DD_PAGE_SIZE;
+    const slice = ddFiltered.slice(start, start + DD_PAGE_SIZE);
+
+    if (!slice.length) {
+      list.innerHTML = '<div class="dd-empty">No results found.</div>';
+      return;
+    }
+
+    list.innerHTML = slice.map((item, idx) => {
+      const isPost    = item.type === 'post';
+      const dateStr   = item.date ? new Date(item.date * 1000).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'short', day: 'numeric'
+      }) : '';
+      const bodyPreview = item.body
+        ? item.body.replace(/\n+/g, ' ').substring(0, 200) + (item.body.length > 200 ? '…' : '')
+        : '';
+
+      return `<div class="dd-item dd-item--${item.type}" style="animation-delay:${idx * 0.02}s">
+        <div class="dd-item-header">
+          <span class="dd-type-badge dd-type-badge--${item.type}">${isPost ? '📄 Post' : '💬 Comment'}</span>
+          <span class="dd-sub">r/${escapeHTML(item.sub)}</span>
+          <span class="dd-date">${dateStr}</span>
+        </div>
+        ${isPost
+          ? `<div class="dd-title">${escapeHTML(item.title)}</div>`
+          : `<div class="dd-context-title">In: <em>${escapeHTML(item.title)}</em></div>`
+        }
+        ${bodyPreview ? `<div class="dd-body">${escapeHTML(bodyPreview)}</div>` : ''}
+        <div class="dd-item-foot">
+          <span class="dd-score">▲ ${item.score.toLocaleString()}</span>
+          ${isPost && item.comments !== undefined
+            ? `<span class="dd-comments">💬 ${item.comments.toLocaleString()}</span>`
+            : ''}
+          ${isPost && item.upvoteRatio != null
+            ? `<span class="dd-ratio">${Math.round(item.upvoteRatio * 100)}% upvoted</span>`
+            : ''}
+          <a class="dd-link" href="${escapeHTML(item.link)}" target="_blank" rel="noopener noreferrer">
+            View on Reddit ↗
+          </a>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Pagination controls ──────────────────────────────────────────
+  function renderDDPagination() {
+    const el = document.getElementById('ddPagination');
+    if (!el) return;
+    const total = Math.ceil(ddFiltered.length / DD_PAGE_SIZE);
+    if (total <= 1) { el.innerHTML = ''; return; }
+
+    const maxBtns = 7;
+    let start = Math.max(0, ddPage - 3);
+    let end   = Math.min(total, start + maxBtns);
+    if (end - start < maxBtns) start = Math.max(0, end - maxBtns);
+
+    const btns = [];
+    if (ddPage > 0) btns.push(`<button class="dd-pg-btn" data-pg="${ddPage-1}">← Prev</button>`);
+    for (let i = start; i < end; i++) {
+      btns.push(`<button class="dd-pg-btn${i === ddPage ? ' active' : ''}" data-pg="${i}">${i+1}</button>`);
+    }
+    if (ddPage < total - 1) btns.push(`<button class="dd-pg-btn" data-pg="${ddPage+1}">Next →</button>`);
+    el.innerHTML = btns.join('');
+  }
+
+  // Pagination click delegation
+  document.addEventListener('click', e => {
+    const pgBtn = e.target.closest('.dd-pg-btn');
+    if (!pgBtn) return;
+    ddPage = parseInt(pgBtn.dataset.pg, 10);
+    renderDDStats();
+    renderDDPage();
+    renderDDPagination();
+    document.getElementById('digDeepPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+})();
 // ── UI Helpers ────────────────────────────────────────────────────
 function setLoading(active) {
   analyzeBtn.disabled = active;
@@ -1742,9 +2027,7 @@ function derivePersonalityType(axes) {
                similar: ['A ghost account','thread sniper'] },
   };
 
-  // CIVP isn't a valid code — handle edge case mapping
-  const lookup = code.length === 4 ? code : code.slice(0,4);
-  return { code: lookup, ...(TYPES[lookup] || TYPES['KIPB']) };
+  return { code, ...(TYPES[code] || TYPES['KIPB']) };
 }
 
 function renderPersonalityType(profile, posts, comments, analysis) {
@@ -2043,42 +2326,5 @@ function renderRoast(profile, posts, comments, analysis) {
   }, 200);
 }
 
-// ── Disable DevTools Shortcuts ───────────────────────────────────
-document.addEventListener('keydown', function (e) {
 
-  // F12
-  if (e.key === 'F12') {
-    e.preventDefault();
-  }
-
-  // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C
-  if (e.ctrlKey && e.shiftKey && (
-      e.key === 'I' ||
-      e.key === 'J' ||
-      e.key === 'C'
-  )) {
-    e.preventDefault();
-  }
-
-  // Ctrl+U (View Source)
-  if (e.ctrlKey && e.key === 'U') {
-    e.preventDefault();
-  }
-});
-
-// ── Disable Copy ────────────────────────────────────────────────
-document.addEventListener('copy', function (e) {
-  e.preventDefault();
-});
-
-
-// ── Basic DevTools Detection ────────────────────────────────────
-setInterval(function () {
-  const widthThreshold = window.outerWidth - window.innerWidth > 160;
-  const heightThreshold = window.outerHeight - window.innerHeight > 160;
-
-  if (widthThreshold || heightThreshold) {
-    document.body.innerHTML = '<h1 style="text-align:center;margin-top:20vh;">DevTools detected.</h1>';
-  }
-}, 1000);
 
