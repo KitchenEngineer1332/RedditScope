@@ -23,7 +23,7 @@ const shareBtn      = $('shareBtn');
 
 const steps = ['step1','step2','step3','step4'].map(id => $(id));
 
-// ── CORS proxy chain (fallback for file:// origins) ─────────────
+
 const CORS_PROXIES = [
   url => url,
   url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
