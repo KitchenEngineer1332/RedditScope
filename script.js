@@ -87,14 +87,14 @@ themeToggle.addEventListener('click', () => {
   window.addEventListener('resize', resize);
 })();
 
-// ── Analyze Again ────────────────────────────────────────────────
+
 analyzeAgain.addEventListener('click', () => {
   results.hidden = true;
   hero.hidden = false;
   hero.style.display = '';
   usernameInput.value = '';
   clearError();
-  // Reset dig deep
+  
   const ddPanel = document.getElementById('digDeepPanel');
   const ddBtn   = document.getElementById('digDeepBtn');
   if (ddPanel) ddPanel.hidden = true;
@@ -105,7 +105,7 @@ analyzeAgain.addEventListener('click', () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
-// ── Form submit ──────────────────────────────────────────────────
+
 searchForm.addEventListener('submit', async e => {
   e.preventDefault();
   const username = usernameInput.value.trim().replace(/^u\//i, '');
